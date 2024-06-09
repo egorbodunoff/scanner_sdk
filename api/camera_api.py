@@ -7,81 +7,182 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../utils'))
 
 from MVSDK import *
 
-class CameraNode:
+class BaseNode:
     """
-    Дескриптор для узлов камеры. Обеспечивает централизованное управление получением и установкой значений узлов.
+    Базовый дескриптор для узлов камеры.
     """
-    def __init__(self, node_attr, value_type):
-        """
-        Инициализация дескриптора.
-
-        :param node_attr: Атрибут узла в классе CameraAPI.
-        :param value_type: Тип значения узла.
-        """
+    def __init__(self, node_attr):
         self.node_attr = node_attr
-        self.value_type = value_type
 
     def __get__(self, instance, owner):
-        """
-        Получение значения узла.
-
-        :param instance: Экземпляр класса CameraAPI.
-        :param owner: Класс-владелец.
-        :return: Значение узла.
-        """
         node = getattr(instance, self.node_attr)
-        return self._get_node_value(node, self.value_type)
+
+        return self._get_node_value(node)
 
     def __set__(self, instance, value):
-        """
-        Установка значения узла.
-
-        :param instance: Экземпляр класса CameraAPI.
-        :param value: Новое значение узла.
-        """
         node = getattr(instance, self.node_attr)
-        self._set_node_value(node, self.value_type(value))
 
-    def _get_node_value(self, node, value_type):
-        """
-        Получение значения узла.
+        self._set_node_value(node, value)
 
-        :param node: Узел.
-        :param value_type: Тип значения.
-        :return: Значение узла или None при ошибке.
-        """
+    def _get_node_value(self, node):
         if node is None:
-            print(f'{value_type.__name__} node is not initialized.')
+            print(f'{self.__class__.__name__} is not initialized.')
             return None
-        value = value_type()
-        nRet = node.contents.getValue(node, byref(value))
+        
+        value = self._get_value_type()()
+        nRet = node.contents.getValue(node, byref(value))              
         if nRet != 0:
-            print(f'get {value_type.__name__} value fail!')
+            print(f'get {self.__class__.__name__} value fail!')
             return None
+        
         return value.value
 
     def _set_node_value(self, node, value):
-        """
-        Установка значения узла.
-
-        :param node: Узел.
-        :param value: Новое значение.
-        :return: True при успешной установке, False при ошибке.
-        """
         if node is None:
-            print(f'{type(value).__name__} node is not initialized.')
+            print(f'{self.__class__.__name__} is not initialized.')
             return False
-        nRet = node.contents.setValue(node, value)
+        
+        nRet = node.contents.setValue(node, self._get_value_type()(value))
         if nRet != 0:
-            print(f'set {type(value).__name__} value [{value}] fail!')
+            print(f'set {self.__class__.__name__} value [{value}] fail!')
             return False
+        
         return True
+    
+    def _get_min_max_values(self, node):
+        value_type = self._get_value_type()
+        
+        min_value = value_type()
+        nRet = node.contents.getMinVal(node, byref(min_value))              
+        if nRet != 0:
+            print(f'Failed to get minimum value for {self.__class__.__name__}.')
+        else:
+            self.min_value = min_value.value 
+
+        max_value = value_type()
+        nRet = node.contents.getMaxVal(node, byref(max_value))              
+        if nRet != 0:
+            print(f'Failed to get maximum value for {self.__class__.__name__}.')
+        else:
+            self.max_value = max_value.value 
+
+    def _get_value_type(self):
+        raise NotImplementedError
+
+
+class IntNode(BaseNode):
+    """
+    Дескриптор для узлов типа int.
+    """
+    def __init__(self, node_attr):
+        super().__init__(node_attr)
+
+        self.min_value = None
+        self.max_value = None
+
+    def __set__(self, instance, value):
+        if not isinstance(value, int):
+            raise TypeError(f'Value must be an integer, got {type(value).__name__}')
+        
+        if self.min_value is not None and value < self.min_value:
+            raise ValueError(f'Value {value} is below the minimum allowed value of {self.min_value}')
+        
+        if self.max_value is not None and value > self.max_value:
+            raise ValueError(f'Value {value} is above the maximum allowed value of {self.max_value}')
+        
+        super().__set__(instance, value)
+
+    def _get_value_type(self):
+        return c_long
+    
+    def _get_node_value(self, node):
+        self._get_min_max_values(node)
+        
+        return super()._get_node_value(node)
+
+
+class DoubleNode(BaseNode):
+    """
+    Дескриптор для узлов типа double.
+    """
+    def __init__(self, node_attr):
+        super().__init__(node_attr)
+
+        self.min_value = None
+        self.max_value = None
+
+    def __set__(self, instance, value):
+        if not isinstance(value, (int, float)):
+            raise TypeError(f'Value must be a number, got {type(value).__name__}')
+        
+        if self.min_value is not None and value < self.min_value:
+            raise ValueError(f'Value {value} is below the minimum allowed value of {self.min_value}')
+        
+        if self.max_value is not None and value > self.max_value:
+            raise ValueError(f'Value {value} is above the maximum allowed value of {self.max_value}')
+        
+        super().__set__(instance, value)
+
+    def _get_value_type(self):
+        return c_double
+    
+    def _get_node_value(self, node):
+        self._get_min_max_values(node)
+        
+        return super()._get_node_value(node)
+
+
+class EnumNode(BaseNode):
+    """
+    Дескриптор для узлов типа enum.
+    """
+    def __init__(self, node_attr, allowed_values=None):
+        super().__init__(node_attr)
+        self.allowed_values = allowed_values
+
+    def __set__(self, instance, value):
+        if value is not None and value not in self.allowed_values:
+            raise ValueError(f'Value {value} is not in the allowed values {self.allowed_values}')
+        super().__set__(instance, value)
+
+    def _get_value_type(self):
+        return c_ulong
+    
+
+class BoolNode(BaseNode):
+    """
+    Дескриптор для узлов типа boolean.
+    """
+    def __init__(self, node_attr):
+        super().__init__(node_attr)
+
+    def __set__(self, instance, value):
+        if value is not None and value not in (0, 1):
+            raise ValueError(f'Value {value} is not in the allowed values {(0, 1)}')
+        super().__set__(instance, value)
+
+    def _get_value_type(self):
+        return c_uint
+           
 
 
 class CameraAPI:
     """
     Класс для работы с камерой с использованием SDK MVSDK.
     """
+    # Использование дескриптора CameraNode для узлов
+    ExposureTime = DoubleNode('_exposure_time_node')
+    AcquisitionMode = EnumNode('_acquisition_mode_node', (0, 1, 2))
+    AcquisitionFrameCount = IntNode('_acquisition_frame_count_node')
+    AcquisitionFrameRate = DoubleNode('_acquisition_frame_rate_node')
+    AcquisitionFrameRateEnable = BoolNode('_acquisition_frame_rate_enable_node')
+    ExposureAuto = EnumNode('_exposure_auto_node', (0, 1, 2))
+    ExposureMode = EnumNode('_exposure_mode_node', (0,))
+    GainRaw = DoubleNode('_gain_raw_node')
+    BlackLevel = IntNode('_black_level')
+    BlackLevelAuto = EnumNode('_black_level_auto', (0, 1, 2))
+    Gamma = DoubleNode('_gamma')
+
     def __init__(self):
         self.camera = None
         self._exposure_time_node = None
@@ -200,6 +301,12 @@ class CameraAPI:
         self._initialize_node(camera, '_acquisition_frame_rate_enable_node', 'AcquisitionFrameRateEnable', self._create_bool_node)
         self._initialize_node(camera, '_exposure_auto_node', 'ExposureAuto', self._create_enum_node)
         self._initialize_node(camera, '_exposure_mode_node', 'ExposureMode', self._create_enum_node)
+        self._initialize_node(camera, '_gain_raw_node', 'GainRaw', self._create_double_node)
+        self._initialize_node(camera, '_black_level', 'BlackLevel', self._create_int_node)
+        self._initialize_node(camera, '_black_level_auto', 'BlackLevelAuto', self._create_enum_node)
+        self._initialize_node(camera, '_gamma', 'Gamma', self._create_double_node)
+       
+
         self._width_node = self._create_int_node(camera, 'Width')
         self._height_node = self._create_int_node(camera, 'Height')
         self._offsetX_node = self._create_int_node(camera, 'OffsetX')
@@ -293,15 +400,6 @@ class CameraAPI:
             'create': GENICAM_createBoolNode
         })
 
-    # Использование дескриптора CameraNode для узлов
-    ExposureTime = CameraNode('_exposure_time_node', c_double)
-    AcquisitionMode = CameraNode('_acquisition_mode_node', c_ulong)
-    AcquisitionFrameCount = CameraNode('_acquisition_frame_count_node', c_long)
-    AcquisitionFrameRate = CameraNode('_acquisition_frame_rate_node', c_double)
-    AcquisitionFrameRateEnable = CameraNode('_acquisition_frame_rate_enable_node', c_uint)
-    ExposureAuto = CameraNode('_exposure_auto_node', c_ulong)
-    ExposureMode = CameraNode('_exposure_mode_node', c_ulong)
-
     def setROI(self, nWidth, nHeight, OffsetX, OffsetY):
         """
         Установка области интереса (ROI) камеры.
@@ -319,6 +417,7 @@ class CameraAPI:
             not self._set_node_value(self._create_int_node(self.camera, 'OffsetY'), OffsetY)
         ):
             return -1
+        
         print('ROI set to OffsetX:', OffsetX, 'OffsetY:', OffsetY, 'Width:', nWidth, 'Height:', nHeight)
         return 0
 
@@ -338,12 +437,14 @@ class CameraAPI:
 
         return width, height, offsetX, offsetY
 
-# Пример использования
-c = CameraAPI()
-with c as camera:
-    if camera.camera:
-        print('Camera is connected.')
-        print(camera.ExposureTime)
-        print(camera.AcquisitionFrameCount)
-    else:
-        print('Failed to connect to the camera.')
+
+if __name__ == '__main__':
+    c = CameraAPI()
+    with c as camera:
+        if camera.camera:
+            print('Camera is connected.')
+            print(camera.BlackLevelAuto)
+            camera.BlackLevelAuto = 0
+            print(camera.BlackLevelAuto)
+        else:
+            print('Failed to connect to the camera.')
