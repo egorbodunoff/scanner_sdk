@@ -2,14 +2,14 @@ import sys
 import os
 from ctypes import *
 
-# Определяем путь к папке с исключениями
 exceptions_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'exceptions'))
 sdk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'utils'))
-# Добавляем путь к папке с исключениями в sys.path
+
 sys.path.append(exceptions_path)
 sys.path.append(sdk_path)
 
-from camera_exceptions import CameraConnectionError, NodeInitializationError
+
+from camera_exceptions import *
 from nodes import * 
 from MVSDK import *
 
