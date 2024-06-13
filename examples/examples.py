@@ -20,7 +20,7 @@ def main():
     try:
         with CameraAPI() as camera:
             print('Camera is connected.')
-            camera.setROI(1920, 1080, 100, 100)
+            camera.setROI(1920, 2000, 100, 100)
             print(camera.getROI())  
 
     except CameraConnectionError:

@@ -1,5 +1,6 @@
 import sys
 import os
+import logging
 from ctypes import *
 
 exceptions_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'exceptions'))
@@ -13,6 +14,35 @@ from camera_exceptions import *
 from nodes import * 
 from MVSDK import *
 
+
+def get_base_logger():
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.DEBUG)
+    logger.propagate = False
+
+    if logger.hasHandlers():
+        logger.handlers.clear()
+
+    file_handler = logging.FileHandler('cache.log', mode='w')
+    file_handler.setLevel(logging.DEBUG)
+    logger.addHandler(file_handler)
+
+    file_formatter = '\t%(asctime)s\t%(levelname)s\t%(name)s\t%(message)s'
+    file_handler.setFormatter(logging.Formatter(file_formatter))
+
+    return logger
+
+def get_stream_handler():
+    stream_handler = logging.StreamHandler()
+    stream_handler.setLevel(logging.DEBUG)
+
+    stdout_formatter = 'stdout_log\t%(asctime)s\t%(levelname)s\t%(name)s\t%(message)s'
+    stream_handler.setFormatter(logging.Formatter(stdout_formatter))
+
+    return stream_handler
+
+logger = get_base_logger()
+# logger.addHandler(get_stream_handler())
 
 class CameraAPI:
     """
@@ -74,19 +104,24 @@ class CameraAPI:
 
         :return: Первый найденный объект камеры или None при ошибке.
         """
+        logger.info("Opening camera")
         system = self.get_system_instance()
         if not system:
+            logger.error("Failed to get system instance")
             raise CameraConnectionError()
 
         camera_list, camera_cnt = self.discover_cameras(system)
         if not camera_list or camera_cnt < 1:
+            logger.error("No cameras discovered")
             raise CameraConnectionError()
 
         first_camera = camera_list[0]
         if not self.connect_camera(first_camera):
+            logger.error("Failed to connect to the first camera")
             raise CameraConnectionError()
 
         self._initialize_nodes(first_camera)
+        logger.info("Camera opened successfully")
 
         return first_camera
 
@@ -148,6 +183,7 @@ class CameraAPI:
 
         :param camera: Объект камеры.
         """
+        logger.info("Initializing camera nodes")
         nodes = {
             '_exposure_time_node': ('ExposureTime', self._create_double_node),
             '_acquisition_mode_node': ('AcquisitionMode', self._create_enum_node),
@@ -170,7 +206,10 @@ class CameraAPI:
             setattr(self, node_attr, create_node_func(camera, node_name))
 
             if not getattr(self, node_attr):
+                logger.error(f"Failed to initialize node: {node_name}")
                 raise NodeInitializationError(node_name)
+            
+        logger.info("Camera nodes initialized successfully")
 
     def _create_node(self, camera, attr_name, node_type):
         """
@@ -188,6 +227,7 @@ class CameraAPI:
         node = pointer(node_type['node']())
         nRet = node_type['create'](byref(node_info), byref(node))
         if nRet != 0:
+            logger.error(f"Failed to create node: {attr_name}")
             raise NodeInitializationError(attr_name)
         return node
 
