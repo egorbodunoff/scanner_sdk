@@ -22,3 +22,8 @@ class NodeValueError(CameraError):
             super().__init__(f'Failed to set value {value} for node {node_name}.')
         else:
             super().__init__(f'Failed to get value for node {node_name}.')
+
+class FrameCaptureError(CameraError):
+    """Исключение для ошибок захвата кадра."""
+    def __init__(self, message='Failed to capture frame.'):
+        super().__init__(message)

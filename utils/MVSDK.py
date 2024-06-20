@@ -18,7 +18,7 @@ def enum(**enums):
 #MVSDKdll = OleDLL("../../../Runtime/Win32/MVSDKmd.dll")
 # 64bit
 #MVSDKdll = OleDLL("../../../Runtime/x64/MVSDKmd.dll")
-MVSDKdll = cdll.LoadLibrary("/opt/iCentral/iCentral/lib/libMVSDK.so")
+MVSDKdll = cdll.LoadLibrary("libMVSDK.so")
 
 #SDK.h => define 宏定义
 MAX_PARAM_CNT        = 1000

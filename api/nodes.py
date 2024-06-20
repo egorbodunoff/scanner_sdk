@@ -2,7 +2,7 @@ import os
 from ctypes import *
 import logging
 
-from camera_exceptions import NodeInitializationError, NodeValueError
+from exceptions.camera_exceptions import NodeInitializationError, NodeValueError
 
 logger = logging.getLogger(__name__)
 
